@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mini Candy Crush Clone</title>
+  <style>
+    :root{
+      --cell-size: 56px;
+      --gap: 6px;
+      --board-size: 8;
+      --bg: #0f1724;
+      --panel: #0b1220;
+      --accent: #ffd166;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;background:linear-gradient(180deg,#071029 0%, #0f1724 100%);color:#e6eef8}
+    .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+    .game {
+      width: calc(var(--cell-size) * var(--board-size) + var(--gap) * (var(--board-size) - 1) + 220px);
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      border-radius:12px;
+      padding:18px;
+      box-shadow: 0 8px 30px rgba(2,6,23,0.6);
+      display:flex;
+      gap:18px;
+      align-items:flex-start;
+    }
+    .board-panel{
+      background:var(--panel);
+      padding:12px;
+      border-radius:10px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    #board {
+      display:grid;
+      grid-template-columns: repeat(var(--board-size), var(--cell-size));
+      grid-auto-rows: var(--cell-size);
+      gap: var(--gap);
+      width: calc(var(--cell-size) * var(--board-size) + var(--gap) * (var(--board-size) - 1));
+      height: calc(var(--cell-size) * var(--board-size) + var(--gap) * (var(--board-size) - 1));
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      padding:8px;
+      border-radius:8px;
+      box-sizing:border-box;
+    }
+    .candy {
+      width:100%;
+      height:100%;
+      border-radius:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:grab;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 4px 10px rgba(2,6,23,0.35);
+      user-select:none;
+    }
+    .candy:active{cursor:grabbing; transform: scale(0.98)}
+    .candy.empty{background:transparent; box-shadow:none; cursor:default}
+    .ui {
+      width:200px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      align-items:stretch;
+    }
+    .panel-card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      padding:12px;
+      border-radius:8px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    .title{font-weight:700;font-size:18px;color:var(--accent);margin-bottom:6px}
+    .score{font-size:28px;font-weight:700;color:#fff}
+    .btn{
+      background:linear-gradient(180deg,#2b6cb0,#1e4a86);
+      color:white;padding:10px;border-radius:8px;border:0;font-weight:600;cursor:pointer;
+    }
+    .small{font-size:13px;color:#bcd3f0}
+    .footer{font-size:12px;color:#9fb6da;text-align:center;margin-top:6px}
+    /* simple candy visuals */
+    .candy::after{
+      content:"";
+      width:70%;
+      height:70%;
+      border-radius:50%;
+      display:block;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+      opacity:0.98;
+    }
+    /* colors */
+    .c-red::after{background:linear-gradient(180deg,#ff6b6b,#e64545)}
+    .c-yellow::after{background:linear-gradient(180deg,#ffd166,#ffb020)}
+    .c-green::after{background:linear-gradient(180deg,#7bd389,#3fb86b)}
+    .c-blue::after{background:linear-gradient(180deg,#6fb3ff,#2b8cff)}
+    .c-purple::after{background:linear-gradient(180deg,#c39bff,#8a5cff)}
+    .c-orange::after{background:linear-gradient(180deg,#ffb07c,#ff7a2b)}
+    /* responsive */
+    @media (max-width:900px){
+      .game{flex-direction:column;width:100%}
+      .ui{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="game" role="application" aria-label="Match three game">
+      <div class="board-panel">
+        <div id="board" aria-live="polite"></div>
+      </div>
+
+      <div class="ui">
+        <div class="panel-card">
+          <div class="title">Mini Candy Crush</div>
+          <div class="small">Match 3 or more to score. Drag to swap adjacent candies.</div>
+        </div>
+
+        <div class="panel-card">
+          <div class="title">Score</div>
+          <div id="score" class="score">0</div>
+        </div>
+
+        <div class="panel-card">
+          <div class="title">Controls</div>
+          <div style="display:flex;gap:8px">
+            <button id="resetBtn" class="btn">Reset</button>
+            <button id="shuffleBtn" class="btn" style="background:linear-gradient(180deg,#9b59b6,#7a3f8f)">Shuffle</button>
+          </div>
+          <div class="footer">Save as <strong>index.html</strong> and open in browser</div>
+        </div>
+
+        <div class="panel-card">
+          <div class="title">Tips</div>
+          <div class="small">Add animations, sounds, levels, and mobile touch support to improve the game.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Basic match-3 implementation
+    const width = 8;
+    const boardSize = width * width;
+    const colors = ['red','yellow','green','blue','purple','orange'];
+    const boardEl = document.getElementById('board');
+    const scoreEl = document.getElementById('score');
+    const resetBtn = document.getElementById('resetBtn');
+    const shuffleBtn = document.getElementById('shuffleBtn');
+
+    let board = [];
+    let score = 0;
+    let dragged = null;
+    let replaced = null;
+
+    function createBoard(){
+      boardEl.innerHTML = '';
+      board = [];
+      for(let i=0;i<boardSize;i++){
+        const cell = document.createElement('div');
+        cell.className = 'candy';
+        const color = randomColor();
+        cell.classList.add('c-' + color);
+        cell.setAttribute('data-id', i);
+        cell.draggable = true;
+        addDragHandlers(cell);
+        boardEl.appendChild(cell);
+        board.push(cell);
+      }
+    }
+
+    function randomColor(){ return colors[Math.floor(Math.random()*colors.length)]; }
+
+    function addDragHandlers(cell){
+      cell.addEventListener('dragstart', dragStart);
+      cell.addEventListener('dragover', dragOver);
+      cell.addEventListener('dragenter', dragEnter);
+      cell.addEventListener('dragleave', dragLeave);
+      cell.addEventListener('drop', dragDrop);
+      cell.addEventListener('dragend', dragEnd);
+
+      // basic touch support (tap to select, tap to swap)
+      cell.addEventListener('click', (e) => {
+        if(!dragged) {
+          dragged = e.currentTarget;
+          dragged.style.transform = 'scale(0.98)';
+        } else {
+          replaced = e.currentTarget;
+          swap(dragged, replaced, true);
+          dragged.style.transform = '';
+          dragged = null;
+          replaced = null;
+        }
+      });
+    }
+
+    function dragStart(e){
+      dragged = e.target;
+      setTimeout(()=> e.target.classList.add('invisible'), 0);
+    }
+    function dragOver(e){ e.preventDefault(); }
+    function dragEnter(e){ e.preventDefault(); }
+    function dragLeave(e){}
+    function dragDrop(e){
+      replaced = e.target;
+    }
+    function dragEnd(e){
+      e.target.classList.remove('invisible');
+      if(dragged && replaced){
+        swap(dragged, replaced, true);
+      }
+      dragged = null;
+      replaced = null;
+    }
+
+    function swap(a, b, check=true){
+      if(!a || !b) return;
+      const idA = Number(a.getAttribute('data-id'));
+      const idB = Number(b.getAttribute('data-id'));
+      const validMoves = [idA-1, idA+1, idA-width, idA+width];
+      if(!validMoves.includes(idB)) return; // only adjacent swaps
+
+      // swap classes
+      const classA = Array.from(a.classList).filter(c => c.startsWith('c-'))[0];
+      const classB = Array.from(b.classList).filter(c => c.startsWith('c-'))[0];
+      a.classList.remove(classA); a.classList.add(classB);
+      b.classList.remove(classB); b.classList.add(classA);
+
+      if(check){
+        if(!checkAnyMatch()){
+          // revert if no match
+          a.classList.remove(classB); a.classList.add(classA);
+          b.classList.remove(classA); b.classList.add(classB);
+        } else {
+          // after successful swap, run collapse and refill
+          setTimeout(() => {
+            collapseBoard();
+          }, 120);
+        }
+      }
+    }
+
+    // Match detection
+    function checkRowForThree(){
+      let found = false;
+      for(let i=0;i<boardSize - 2;i++){
+        const rowEnd = Math.floor(i/width) === Math.floor((i+2)/width);
+        if(!rowEnd) continue;
+        const c1 = getColorAt(i);
+        if(!c1) continue;
+        if(c1 === getColorAt(i+1) && c1 === getColorAt(i+2)){
+          found = true;
+          markEmpty(i); markEmpty(i+1); markEmpty(i+2);
+          score += 30;
+        }
+      }
+      return found;
+    }
+
+    function checkRowForFour(){
+      let found = false;
+      for(let i=0;i<boardSize - 3;i++){
+        const rowEnd = Math.floor(i/width) === Math.floor((i+3)/width);
+        if(!rowEnd) continue;
+        const c1 = getColorAt(i);
+        if(!c1) continue;
+        if(c1 === getColorAt(i+1) && c1 === getColorAt(i+2) && c1 === getColorAt(i+3)){
+          found = true;
+          markEmpty(i); markEmpty(i+1); markEmpty(i+2); markEmpty(i+3);
+          score += 80;
+        }
+      }
+      return found;
+    }
+
+    function checkColumnForThree(){
+      let found = false;
+      for(let i=0;i<boardSize - 2*width;i++){
+        const c1 = getColorAt(i);
+        if(!c1) continue;
+        if(c1 === getColorAt(i+width) && c1 === getColorAt(i+2*width)){
+          found = true;
+          markEmpty(i); markEmpty(i+width); markEmpty(i+2*width);
+          score += 30;
+        }
+      }
+      return found;
+    }
+
+    function checkColumnForFour(){
+      let found = false;
+      for(let i=0;i<boardSize - 3*width;i++){
+        const c1 = getColorAt(i);
+        if(!c1) continue;
+        if(c1 === getColorAt(i+width) && c1 === getColorAt(i+2*width) && c1 === getColorAt(i+3*width)){
+          found = true;
+          markEmpty(i); markEmpty(i+width); markEmpty(i+2*width); markEmpty(i+3*width);
+          score += 80;
+        }
+      }
+      return found;
+    }
+
+    function getColorAt(idx){
+      const el = board[idx];
+      if(!el) return null;
+      const cls = Array.from(el.classList).find(c => c.startsWith('c-'));
+      return cls ? cls.slice(2) : null;
+    }
+
+    function markEmpty(idx){
+      const el = board[idx];
+      if(!el) return;
+      // remove color classes
+      colors.forEach(col => el.classList.remove('c-' + col));
+      el.classList.add('empty');
+    }
+
+    // Collapse and refill
+    function collapseBoard(){
+      let moved = false;
+      for(let i = boardSize - 1 - width; i >= 0; i--){
+        const below = i + width;
+        if(board[below].classList.contains('empty') && !board[i].classList.contains('empty')){
+          // move color down
+          const cls = Array.from(board[i].classList).find(c => c.startsWith('c-'));
+          if(cls){
+            board[below].classList.remove('empty');
+            colors.forEach(col => board[below].classList.remove('c-' + col));
+            board[below].classList.add(cls);
+            board[i].classList.remove(cls);
+            board[i].classList.add('empty');
+            moved = true;
+          }
+        }
+      }
+      // refill top row
+      for(let i=0;i<width;i++){
+        if(board[i].classList.contains('empty')){
+          const col = randomColor();
+          colors.forEach(c => board[i].classList.remove('c-' + c));
+          board[i].classList.remove('empty');
+          board[i].classList.add('c-' + col);
+        }
+      }
+      if(moved){
+        // after collapse, check for new matches
+        setTimeout(() => {
+          runChecks();
+        }, 80);
+      } else {
+        updateScore();
+      }
+    }
+
+    function runChecks(){
+      let any = false;
+      // check fours first for bigger combos
+      if(checkRowForFour()) any = true;
+      if(checkColumnForFour()) any = true;
+      if(checkRowForThree()) any = true;
+      if(checkColumnForThree()) any = true;
+
+      if(any){
+        // small delay to show cleared cells then collapse
+        setTimeout(() => {
+          collapseBoard();
+        }, 120);
+      } else {
+        updateScore();
+      }
+    }
+
+    function checkAnyMatch(){
+      // quick check if any match exists after a swap
+      return (
+        checkRowForThreeCheckOnly() ||
+        checkRowForFourCheckOnly() ||
+        checkColumnForThreeCheckOnly() ||
+        checkColumnForFourCheckOnly()
+      );
+    }
+
+    // lightweight check-only versions (do not clear)
+    function checkRowForThreeCheckOnly(){
+      for(let i=0;i<boardSize - 2;i++){
+        const rowEnd = Math.floor(i/width) === Math.floor((i+2)/width);
+        if(!rowEnd) continue;
+        const c1 = getColorAt(i);
+        if(!c1) continue;
+        if(c1 === getColorAt(i+1) && c1 === getColorAt(i+2)) return true;
+      }
+      return false;
+    }
+    function checkRowForFourCheckOnly(){
+      for(let i=0;i<boardSize - 3;i++){
+        const rowEnd = Math.floor(i/width) === Math.floor((i+3)/width);
+        if(!rowEnd) continue;
+        const c1 = getColorAt(i);
+        if(!c1) continue;
+        if(c1 === getColorAt(i+1) && c1 === getColorAt(i+2) && c1 === getColorAt(i+3)) return true;
+      }
+      return false;
+    }
+    function checkColumnForThreeCheckOnly(){
+      for(let i=0;i<boardSize - 2*width;i++){
+        const c1 = getColorAt(i);
+        if(!c1) continue;
+        if(c1 === getColorAt(i+width) && c1 === getColorAt(i+2*width)) return true;
+      }
+      return false;
+    }
+    function checkColumnForFourCheckOnly(){
+      for(let i=0;i<boardSize - 3*width;i++){
+        const c1 = getColorAt(i);
+        if(!c1) continue;
+        if(c1 === getColorAt(i+width) && c1 === getColorAt(i+2*width) && c1 === getColorAt(i+3*width)) return true;
+      }
+      return false;
+    }
+
+    function updateScore(){
+      scoreEl.textContent = score;
+    }
+
+    // Utility: shuffle board colors
+    function shuffleBoard(){
+      const allColors = board.map(cell => {
+        const cls = Array.from(cell.classList).find(c => c.startsWith('c-'));
+        return cls ? cls.slice(2) : randomColor();
+      });
+      // shuffle array
+      for(let i=allColors.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [allColors[i], allColors[j]] = [allColors[j], allColors[i]];
+      }
+      // apply
+      board.forEach((cell, idx) => {
+        colors.forEach(c => cell.classList.remove('c-' + c));
+        cell.classList.remove('empty');
+        cell.classList.add('c-' + allColors[idx]);
+      });
+    }
+
+    // Reset game
+    function resetGame(){
+      score = 0;
+      createBoard();
+      // ensure no immediate matches on start
+      setTimeout(() => {
+        runChecks();
+      }, 60);
+    }
+
+    // initial setup
+    createBoard();
+    setTimeout(() => runChecks(), 80);
+
+    // periodic check loop to clear accidental matches
+    setInterval(() => {
+      runChecks();
+    }, 400);
+
+    // buttons
+    resetBtn.addEventListener('click', () => resetGame());
+    shuffleBtn.addEventListener('click', () => {
+      shuffleBoard();
+      setTimeout(() => runChecks(), 80);
+    });
+
+    // keyboard: R to reset, S to shuffle
+    window.addEventListener('keydown', (e) => {
+      if(e.key.toLowerCase() === 'r') resetGame();
+      if(e.key.toLowerCase() === 's') { shuffleBoard(); setTimeout(() => runChecks(), 80); }
+    });
+  </script>
+</body>
+</html>
